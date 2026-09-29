@@ -1,0 +1,5 @@
+POST http://localhost:8080/api/prices/AAPL/fetch
+
+###
+
+GET http://localhost:8080/api/prices/AAPL
