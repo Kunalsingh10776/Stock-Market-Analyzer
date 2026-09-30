@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Stock Analyzer — Strategy Backtesting Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        canvas: '#0a0e17',
+                        surface: '#111827',
+                        border: '#1f2937',
+                    },
+                    animation: {
+                        'fade-up': 'fadeUp 0.4s ease-out',
+                        'slide-in': 'slideIn 0.3s ease-out',
+                        shimmer: 'shimmer 1.6s infinite',
+                    },
+                    keyframes: {
+                        fadeUp: { '0%': { opacity: 0, transform: 'translateY(8px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
+                        slideIn: { '0%': { opacity: 0, transform: 'translateX(12px)' }, '100%': { opacity: 1, transform: 'translateX(0)' } },
+                        shimmer: { '0%': { backgroundPosition: '-400px 0' }, '100%': { backgroundPosition: '400px 0' } },
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        body {
+            background:
+                    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99,102,241,0.15), transparent),
+                    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(16,185,129,0.08), transparent),
+                    #0a0e17;
+            min-height: 100vh;
+        }
+        .glass {
+            background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+            border: 1px solid rgba(255,255,255,0.08);
+            backdrop-filter: blur(12px);
+        }
+        .glass-hover:hover {
+            border-color: rgba(255,255,255,0.16);
+            transform: translateY(-2px);
+        }
+        .grad-text {
+            background: linear-gradient(135deg, #818cf8 0%, #34d399 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            box-shadow: 0 4px 20px -4px rgba(99,102,241,0.5);
+        }
+        .btn-primary:hover:not(:disabled) {
+            box-shadow: 0 6px 28px -4px rgba(99,102,241,0.7);
+            transform: translateY(-1px);
+        }
+        .input-field {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            transition: all 0.15s ease;
+        }
+        .input-field:focus {
+            background: rgba(255,255,255,0.05);
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+        }
+        .skeleton {
+            background: linear-gradient(90deg, #131a2a 25%, #1a2337 50%, #131a2a 75%);
+            background-size: 800px 100%;
+        }
+        ::-webkit-scrollbar { height: 8px; width: 8px; }
+        ::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4a5568; }
+        table tbody tr { transition: background 0.12s ease; }
+        table tbody tr:hover { background: rgba(255,255,255,0.03); }
+        .stock-chip {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            transition: all 0.15s ease;
+        }
+        .stock-chip:hover {
+            border-color: rgba(129,140,248,0.5);
+            background: rgba(99,102,241,0.08);
+            transform: translateY(-1px);
+        }
+        .stock-chip.active {
+            background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(52,211,153,0.1));
+            border-color: #818cf8;
+            box-shadow: 0 0 0 1px rgba(129,140,248,0.3);
+        }
+    </style>
+</head>
+<body class="text-slate-100">
+
+<!-- Navbar -->
+<nav class="sticky top-0 z-20 glass">
+    <div class="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>
+            </div>
+            <div>
+                <div class="font-bold text-[15px] leading-tight">Stock Analyzer</div>
+                <div class="text-[10px] text-slate-500 leading-tight">Strategy Backtesting Engine</div>
+            </div>
+        </div>
+        <div id="apiStatus" class="flex items-center gap-1.5 text-xs text-slate-400 px-3 py-1.5 rounded-full glass">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> checking…
+        </div>
+    </div>
+</nav>
+
+<main class="max-w-6xl mx-auto px-5 py-8">
+
+    <!-- Hero / Landing experience -->
+    <section class="relative overflow-hidden rounded-3xl glass p-7 sm:p-10 mb-8 animate-fade-up">
+        <div class="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-indigo-500/10 blur-3xl"></div>
+        <div class="absolute -bottom-28 -left-20 w-64 h-64 rounded-full bg-emerald-400/10 blur-3xl"></div>
+        <div class="relative max-w-3xl">
+            <div class="inline-flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-3 py-1.5 text-[11px] text-slate-400 mb-4">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                Historical Strategy Analysis
+            </div>
+            <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight mb-4">
+                Stock Analyzer<br><span class="grad-text">Understand. Backtest. Compare.</span>
+            </h1>
+            <p class="text-slate-400 text-sm sm:text-base leading-7 max-w-2xl mb-6">
+                Explore how simple trading strategies would have behaved on historical stock data.
+                Select a stock, choose a strategy, and inspect returns, risk, trades, and signals in one place.
+            </p>
+            <div class="flex flex-wrap gap-2 text-[11px] text-slate-400">
+                <span class="glass rounded-full px-3 py-1.5">📈 Historical Backtesting</span>
+                <span class="glass rounded-full px-3 py-1.5">🎯 BUY / SELL Signals</span>
+                <span class="glass rounded-full px-3 py-1.5">📊 Risk Metrics</span>
+                <span class="glass rounded-full px-3 py-1.5">🔍 Strategy Comparison</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stock picker -->
+    <div class="mb-6 animate-fade-up">
+        <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-2.5">Popular Stocks — click to analyze</p>
+        <div class="flex flex-wrap gap-2" id="stockPicker">
+            <!-- chips injected by JS -->
+        </div>
+    </div>
+
+    <!-- Settings -->
+    <details class="glass rounded-2xl p-4 mb-5 group">
+        <summary class="cursor-pointer text-xs text-slate-400 flex items-center gap-2 select-none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            Backend connection settings
+        </summary>
+        <div class="mt-3">
+            <input id="apiBase" type="text" value="http://localhost:8081"
+                   class="w-full input-field rounded-lg px-3 py-2 text-sm mono focus:outline-none" />
+            <p class="text-[11px] text-slate-500 mt-1.5">Swap this for your public backend URL once deployed (e.g. Render).</p>
+        </div>
+    </details>
+
+    <!-- Strategy & actions -->
+    <div class="glass rounded-2xl p-5 mb-6 animate-fade-up">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+                <label class="text-[11px] font-medium text-slate-400 block mb-1.5 uppercase tracking-wide">Strategy</label>
+                <select id="strategy" class="w-full input-field rounded-lg px-3.5 py-2.5 text-sm focus:outline-none appearance-none">
+                    <option value="golden-cross">Golden Cross</option>
+                    <option value="rsi-reversion">RSI Reversion</option>
+                </select>
+                <button type="button" onclick="showStrategyExplanation()" class="mt-2 text-[11px] text-indigo-300 hover:text-indigo-200 font-medium transition-colors flex items-center gap-1">
+                    <span class="w-4 h-4 rounded-full border border-indigo-400/50 flex items-center justify-center">?</span>
+                    Explain Strategy
+                </button>
+            </div>
+            <div class="flex items-end">
+                <button id="analyzeBtn" onclick="runAnalyze()"
+                        class="w-full btn-primary disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none rounded-lg px-3 py-2.5 text-sm font-semibold transition-all flex items-center justify-center gap-1.5">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 17l6-6 4 4 8-8"/></svg>
+                    Analyze
+                </button>
+            </div>
+            <div class="flex items-end">
+                <button id="compareBtn" onclick="runCompare()"
+                        class="w-full glass glass-hover disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-3 py-2.5 text-sm font-semibold transition-all flex items-center justify-center gap-1.5">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 3v18M16 3v18M3 8h5M16 8h5M3 16h5M16 16h5"/></svg>
+                    Compare
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Strategy explanation modal -->
+    <div id="strategyModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-5" onclick="closeStrategyExplanation(event)">
+        <div class="glass rounded-2xl w-full max-w-lg p-6 shadow-2xl animate-fade-up" onclick="event.stopPropagation()">
+            <div class="flex items-start justify-between gap-4 mb-5">
+                <div>
+                    <p class="text-[10px] uppercase tracking-widest text-indigo-300 font-semibold mb-1">Strategy guide</p>
+                    <h3 id="strategyModalTitle" class="text-xl font-extrabold">Explain Strategy</h3>
+                </div>
+                <button type="button" onclick="closeStrategyExplanation()" class="text-slate-500 hover:text-slate-200 text-lg">✕</button>
+            </div>
+            <div id="strategyModalBody" class="text-sm text-slate-300 leading-6"></div>
+            <div class="mt-5 rounded-xl bg-white/[0.03] border border-white/5 p-4">
+                <p class="text-[10px] uppercase tracking-widest text-slate-500 font-semibold mb-2">How to read it</p>
+                <p id="strategyModalTip" class="text-xs text-slate-400 leading-5"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error banner -->
+    <div id="errorBanner" class="hidden mb-6 bg-red-950/50 border border-red-800/60 text-red-200 rounded-xl px-4 py-3.5 text-sm flex justify-between items-start gap-3 animate-slide-in">
+        <div class="flex items-start gap-2.5">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" class="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span id="errorText"></span>
+        </div>
+        <button onclick="hideError()" class="text-red-400 hover:text-red-200 shrink-0">✕</button>
+    </div>
+
+    <!-- Loading skeleton -->
+    <div id="loading" class="hidden space-y-4">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div class="h-24 skeleton animate-shimmer rounded-2xl"></div>
+            <div class="h-24 skeleton animate-shimmer rounded-2xl"></div>
+            <div class="h-24 skeleton animate-shimmer rounded-2xl"></div>
+            <div class="h-24 skeleton animate-shimmer rounded-2xl"></div>
+        </div>
+        <div class="h-72 skeleton animate-shimmer rounded-2xl"></div>
+    </div>
+
+    <!-- Empty state -->
+    <div id="emptyState" class="text-center py-16 text-slate-500">
+        <div class="w-16 h-16 rounded-2xl glass flex items-center justify-center mx-auto mb-4">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
+        </div>
+        <p class="text-sm">Select a stock above, choose a strategy, then hit <span class="text-slate-300 font-medium">Analyze</span> or <span class="text-slate-300 font-medium">Compare</span> to get started.</p>
+    </div>
+
+    <!-- Results -->
+    <div id="results"></div>
+
+</main>
+
+<footer class="max-w-6xl mx-auto px-5 py-8 text-center text-[11px] text-slate-600">
+    Sample/demo data · Not investment advice
+</footer>
+
+<script>
+    const $ = (id) => document.getElementById(id);
+    let chartInstance = null;
+
+    /** Known tickers this demo has sample data bundled for. Update this list if you add
+     *  more sample-data/<TICKER>.json files to the backend. */
+    const STOCKS = [
+        { symbol: 'TCS',   name: 'Tata Consultancy Services' },
+        { symbol: 'SAIL',  name: 'Steel Authority of India' },
+        { symbol: 'BPCL',  name: 'Bharat Petroleum' },
+        { symbol: 'IRCTC', name: 'Indian Railway Catering & Tourism' },
+        { symbol: 'ONGC',  name: 'Oil & Natural Gas Corporation' },
+        { symbol: 'VEDT',  name: 'Vedanta' },
+    ];
+
+    function renderStockPicker() {
+        $('stockPicker').innerHTML = STOCKS.map(s => `
+    <button type="button" class="stock-chip rounded-xl px-4 py-2.5 text-left" data-symbol="${s.symbol}" onclick="selectStock('${s.symbol}')">
+      <div class="font-bold text-sm">${s.symbol}</div>
+      <div class="text-[10px] text-slate-500 leading-tight mt-0.5">${s.name}</div>
+    </button>
+  `).join('');
+    }
+
+    let selectedTicker = null;
+
+    function selectStock(symbol) {
+        selectedTicker = symbol;
+        document.querySelectorAll('.stock-chip').forEach(chip => {
+            chip.classList.toggle('active', chip.dataset.symbol === symbol);
+        });
+        hideError();
+    }
+    renderStockPicker();
+
+    function showStrategyExplanation() {
+        const strategy = $('strategy').value;
+        const content = {
+            'golden-cross': {
+                title: 'Golden Cross',
+                body: `Golden Cross is a trend-following strategy. It compares a shorter moving average with a longer moving average. A <strong class="text-emerald-300">BUY</strong> signal is generated when the short-term average crosses above the long-term average. A <strong class="text-rose-300">SELL</strong> signal is generated when it crosses back below.`,
+                tip: 'It is designed to follow longer-term trends, so signals may be less frequent and can arrive after a trend has already started.'
+            },
+            'rsi-reversion': {
+                title: 'RSI Reversion',
+                body: `RSI Reversion uses the Relative Strength Index (RSI) to look for possible moves back toward a typical range. The strategy watches for <strong class="text-slate-200">oversold</strong> and <strong class="text-slate-200">overbought</strong> conditions and generates signals according to the configured RSI thresholds.`,
+                tip: 'It can generate more frequent signals in sideways markets, while strong trends can keep RSI extreme for longer than expected.'
+            }
+        }[strategy];
+
+        $('strategyModalTitle').textContent = content.title;
+        $('strategyModalBody').innerHTML = content.body;
+        $('strategyModalTip').textContent = content.tip;
+        $('strategyModal').classList.remove('hidden');
+    }
+
+    function closeStrategyExplanation(event) {
+        if (event && event.target !== $('strategyModal')) return;
+        $('strategyModal').classList.add('hidden');
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') $('strategyModal').classList.add('hidden');
+    });
+
+    function getApiBase() {
+        return $('apiBase').value.trim().replace(/\/$/, '');
+    }
+
+    function showError(msg) {
+        $('errorText').textContent = msg;
+        $('errorBanner').classList.remove('hidden');
+    }
+    function hideError() {
+        $('errorBanner').classList.add('hidden');
+    }
+
+    function setLoading(isLoading) {
+        $('loading').classList.toggle('hidden', !isLoading);
+        $('analyzeBtn').disabled = isLoading;
+        $('compareBtn').disabled = isLoading;
+        if (isLoading) { $('results').innerHTML = ''; $('emptyState').classList.add('hidden'); hideError(); }
+    }
+
+    function fmtPct(v) {
+        if (v === null || v === undefined || Number.isNaN(v)) return 'N/A';
+        const sign = v > 0 ? '+' : '';
+        return `${sign}${v.toFixed(2)}%`;
+    }
+    function fmtNum(v, decimals = 2) {
+        if (v === null || v === undefined || Number.isNaN(v)) return 'N/A';
+        return v.toFixed(decimals);
+    }
+    function fmtDate(d) {
+        if (!d) return '—';
+        try {
+            return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        } catch { return d; }
+    }
+    function colorClass(v) {
+        if (v === null || v === undefined || Number.isNaN(v)) return 'text-slate-400';
+        return v >= 0 ? 'text-emerald-400' : 'text-rose-400';
+    }
+    function fmtPrice(v) {
+        if (v === null || v === undefined) return 'N/A';
+        return v.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    }
+    function trendIcon(v) {
+        if (v === null || v === undefined || Number.isNaN(v)) return '';
+        const up = v >= 0;
+        const color = up ? '#34d399' : '#fb7185';
+        const path = up ? 'M18 15l-6-6-6 6' : 'M6 9l6 6 6-6';
+        return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="3" class="inline -mt-0.5"><path d="${path}"/></svg>`;
+    }
+
+    async function fetchJson(url) {
+        let response;
+        try {
+            response = await fetch(url);
+        } catch (networkErr) {
+            throw new Error(`Cannot reach the analysis server at ${getApiBase()}. Is the backend running there?`);
+        }
+        let body;
+        try {
+            body = await response.json();
+        } catch {
+            throw new Error(`Server returned an unreadable response (status ${response.status}).`);
+        }
+        if (!response.ok) {
+            throw new Error(body && body.message ? body.message : `Request failed with status ${response.status}`);
+        }
+        return body;
+    }
+
+    function validateTicker() {
+        if (!selectedTicker) {
+            showError('Please select a stock first.');
+            return null;
+        }
+        return selectedTicker;
+    }
+
+    async function runAnalyze() {
+        const ticker = validateTicker();
+        if (!ticker) return;
+
+        const strategy = $('strategy').value;
+        const params = new URLSearchParams({ strategy });
+
+        setLoading(true);
+        try {
+            const data = await fetchJson(`${getApiBase()}/api/v1/analyze/${encodeURIComponent(ticker)}?${params}`);
+            renderSingle(data);
+        } catch (e) {
+            showError(e.message);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function runCompare() {
+        const ticker = validateTicker();
+        if (!ticker) return;
+
+        setLoading(true);
+        try {
+            const data = await fetchJson(`${getApiBase()}/api/v1/analyze/${encodeURIComponent(ticker)}/compare`);
+            renderCompare(data);
+        } catch (e) {
+            showError(e.message);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function statCard(label, value, icon, valueColorClass) {
+        return `
+    <div class="glass glass-hover rounded-2xl p-4 transition-all duration-200">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-[11px] font-medium text-slate-400 uppercase tracking-wide">${label}</p>
+        <div class="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center">${icon}</div>
+      </div>
+      <p class="text-2xl font-bold ${valueColorClass || 'text-slate-100'} mono">${value}</p>
+    </div>`;
+    }
+
+    const icons = {
+        returns: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>`,
+        winrate: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><path d="M12 15a6 6 0 006-6V3H6v6a6 6 0 006 6z"/><path d="M6 9H4a2 2 0 01-2-2V6a2 2 0 012-2h2M18 9h2a2 2 0 002-2V6a2 2 0 00-2-2h-2M12 15v4m-4 4h8"/></svg>`,
+        sharpe: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><rect x="3" y="12" width="4" height="8"/><rect x="10" y="8" width="4" height="12"/><rect x="17" y="4" width="4" height="16"/></svg>`,
+        drawdown: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="2"><path d="M22 17l-9.5-9.5-5 5L1 6"/><path d="M7 17H1v-6"/></svg>`,
+    };
+
+    function tradesTable(trades) {
+        if (!trades || trades.length === 0) {
+            return `<div class="glass rounded-2xl p-10 text-center">
+      <p class="text-slate-400 text-sm">No trades were triggered by this strategy in the selected period.</p>
+    </div>`;
+        }
+        const rows = trades.map(t => `
+    <tr class="border-b border-white/5">
+      <td class="py-3 px-4 text-sm text-slate-300">${fmtDate(t.entryDate)}</td>
+      <td class="py-3 px-4 text-sm mono">₹${fmtPrice(t.entryPrice)}</td>
+      <td class="py-3 px-4 text-sm text-slate-300">${fmtDate(t.exitDate)}</td>
+      <td class="py-3 px-4 text-sm mono">₹${fmtPrice(t.exitPrice)}</td>
+      <td class="py-3 px-4 text-sm font-semibold ${colorClass(t.returnPct)} mono">${fmtPct(t.returnPct)}</td>
+      <td class="py-3 px-4 text-sm">
+        <span class="px-2.5 py-1 rounded-full text-[11px] font-semibold ${t.winningTrade ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}">
+          ${t.winningTrade ? '● Win' : '● Loss'}
+        </span>
+      </td>
+    </tr>`).join('');
+        return `
+    <div class="glass rounded-2xl overflow-x-auto">
+      <table class="w-full whitespace-nowrap">
+        <thead>
+          <tr class="text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide border-b border-white/10">
+            <th class="py-3 px-4">Entry Date</th>
+            <th class="py-3 px-4">Entry Price</th>
+            <th class="py-3 px-4">Exit Date</th>
+            <th class="py-3 px-4">Exit Price</th>
+            <th class="py-3 px-4">Return</th>
+            <th class="py-3 px-4">Result</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+    }
+
+    function equityCurveFromTrades(trades) {
+        const points = [{ x: 0, y: 1, signal: 'START', date: null, price: null }];
+        let equity = 1;
+        (trades || []).forEach((t, i) => {
+            // BUY marker: the position is opened before the trade return is applied.
+            points.push({
+                x: points.length,
+                y: equity,
+                signal: 'BUY',
+                date: t.entryDate,
+                price: t.entryPrice,
+                trade: i + 1
+            });
+
+            equity *= (1 + (t.returnPct || 0) / 100);
+
+            // SELL marker: the position is closed after the trade return is applied.
+            points.push({
+                x: points.length,
+                y: equity,
+                signal: 'SELL',
+                date: t.exitDate,
+                price: t.exitPrice,
+                trade: i + 1,
+                returnPct: t.returnPct
+            });
+        });
+        return points;
+    }
+
+    function drawChart(trades) {
+        const canvas = document.getElementById('equityChart');
+        const oldMessage = document.getElementById('chartMessage');
+        const oldLegend = document.getElementById('signalLegend');
+        if (oldMessage) oldMessage.remove();
+        if (oldLegend) oldLegend.remove();
+        if (chartInstance) chartInstance.destroy();
+
+        const points = equityCurveFromTrades(trades);
+
+        if (points.length <= 1) {
+            canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+            canvas.insertAdjacentHTML('afterend', `
+      <div id="chartMessage" class="text-center py-12">
+        <div class="text-slate-400 text-sm font-medium mb-2">No trades generated</div>
+        <div class="text-slate-500 text-xs max-w-md mx-auto">
+          The graph is empty because the selected strategy did not generate any buy/sell signals for this stock during the available historical data period.
+        </div>
+      </div>
+    `);
+            return;
+        }
+
+        const ctx = canvas.getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 260);
+        gradient.addColorStop(0, 'rgba(99,102,241,0.35)');
+        gradient.addColorStop(1, 'rgba(99,102,241,0.0)');
+
+        const buyPoints = points.map((p, i) => p.signal === 'BUY' ? { x: i, y: p.y } : null);
+        const sellPoints = points.map((p, i) => p.signal === 'SELL' ? { x: i, y: p.y } : null);
+
+        chartInstance = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: points.map(p => p.signal === 'START' ? 'Start' : `${p.signal} · Trade ${p.trade}`),
+                datasets: [
+                    {
+                        label: 'Equity (starting at 1.0)',
+                        data: points.map(p => p.y),
+                        borderColor: '#818cf8',
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.35,
+                        pointRadius: points.map(p => p.signal === 'START' ? 3 : 4),
+                        pointBackgroundColor: '#0a0e17',
+                        pointBorderColor: '#818cf8',
+                        pointBorderWidth: 2,
+                        pointHoverRadius: 6,
+                    },
+                    {
+                        label: 'BUY signal',
+                        data: buyPoints,
+                        showLine: false,
+                        pointRadius: 7,
+                        pointHoverRadius: 9,
+                        pointBackgroundColor: '#34d399',
+                        pointBorderColor: '#ecfdf5',
+                        pointBorderWidth: 2,
+                    },
+                    {
+                        label: 'SELL signal',
+                        data: sellPoints,
+                        showLine: false,
+                        pointRadius: 7,
+                        pointHoverRadius: 9,
+                        pointBackgroundColor: '#fb7185',
+                        pointBorderColor: '#fff1f2',
+                        pointBorderWidth: 2,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        labels: { color: '#94a3b8', font: { family: 'Plus Jakarta Sans' } }
+                    },
+                    tooltip: {
+                        backgroundColor: '#111827',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1,
+                        titleColor: '#e2e8f0',
+                        bodyColor: '#cbd5e1',
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            title: (items) => {
+                                const p = points[items[0].dataIndex];
+                                return p.signal === 'START' ? 'Backtest Start' : `${p.signal} · Trade ${p.trade}`;
+                            },
+                            afterBody: (items) => {
+                                const p = points[items[0].dataIndex];
+                                if (p.signal === 'START') return [];
+                                const lines = [];
+                                if (p.date) lines.push(`Date: ${fmtDate(p.date)}`);
+                                if (p.price !== null && p.price !== undefined) lines.push(`Price: ₹${fmtPrice(p.price)}`);
+                                if (p.returnPct !== undefined) lines.push(`Trade return: ${fmtPct(p.returnPct)}`);
+                                return lines;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    y: { ticks: { color: '#64748b', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+                }
+            }
+        });
+
+        canvas.insertAdjacentHTML('afterend', `
+    <div id="signalLegend" class="flex flex-wrap items-center justify-center gap-5 mt-3 text-xs text-slate-400">
+      <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-emerald-400/20"></span> BUY — position opened</span>
+      <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-rose-400 ring-2 ring-rose-400/20"></span> SELL — position closed</span>
+    </div>
+  `);
+    }
+
+    function renderSingle(data) {
+        const b = data.backtest || {};
+        const r = data.riskMetrics || {};
+
+        $('results').innerHTML = `
+    <div class="mb-5 animate-fade-up">
+      <h2 class="text-2xl font-extrabold flex items-center gap-2 flex-wrap">
+        ${data.ticker}
+        ${data.benchmark ? `<span class="text-slate-500 text-base font-medium">vs ${data.benchmark}</span>` : ''}
+      </h2>
+      <p class="text-sm text-slate-500 mt-1">${fmtDate(data.fromDate)} → ${fmtDate(data.toDate)} · ${data.barsAnalyzed} bars · <span class="text-indigo-300 font-medium">${b.strategyName || ''}</span></p>
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 animate-fade-up">
+      ${statCard('Total Return', `${trendIcon(b.totalReturnPct)} ${fmtPct(b.totalReturnPct)}`, icons.returns, colorClass(b.totalReturnPct))}
+      ${statCard('Win Rate', fmtPct(b.winRatePct), icons.winrate)}
+      ${statCard('Sharpe Ratio', fmtNum(r.sharpeRatio), icons.sharpe, colorClass(r.sharpeRatio))}
+      ${statCard('Max Drawdown', `-${fmtNum(Math.abs(r.maxDrawdownPct || 0))}%`, icons.drawdown, 'text-rose-400')}
+    </div>
+
+    <div class="glass rounded-2xl p-5 mb-6 animate-fade-up">
+      <h3 class="text-sm font-semibold text-slate-400 mb-4 uppercase tracking-wide">Equity Curve</h3>
+      <canvas id="equityChart" height="90"></canvas>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 animate-fade-up">
+      <div class="glass rounded-xl p-4">
+        <p class="text-[11px] text-slate-500 uppercase tracking-wide mb-1">Beta</p>
+        <p class="text-lg font-bold mono">${r.beta != null ? fmtNum(r.beta, 3) : 'N/A'}</p>
+      </div>
+      <div class="glass rounded-xl p-4">
+        <p class="text-[11px] text-slate-500 uppercase tracking-wide mb-1">Ann. Volatility</p>
+        <p class="text-lg font-bold mono">${fmtPct(r.annualizedVolatilityPct)}</p>
+      </div>
+      <div class="glass rounded-xl p-4">
+        <p class="text-[11px] text-slate-500 uppercase tracking-wide mb-1">Ann. Return</p>
+        <p class="text-lg font-bold mono ${colorClass(r.annualizedReturnPct)}">${fmtPct(r.annualizedReturnPct)}</p>
+      </div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wide">Trades <span class="text-slate-600">(${b.totalTrades ?? 0})</span></h3>
+    <div class="animate-fade-up">${tradesTable(b.trades)}</div>
+
+    ${(!b.trades || b.trades.length === 0) ? `
+      <div class="glass rounded-2xl p-5 mt-6 border border-amber-400/20 bg-amber-400/5 animate-fade-up">
+        <div class="flex items-start gap-3">
+          <div class="w-9 h-9 rounded-xl bg-amber-400/10 flex items-center justify-center shrink-0">💡</div>
+          <div>
+            <h3 class="font-semibold text-slate-200 mb-1">Why did I get no trades?</h3>
+            <p class="text-sm text-slate-400 leading-6 mb-3">
+              No trade means the selected strategy did not find a complete buy/sell signal in the available historical data.
+              This is not necessarily an error — the strategy may simply have had no qualifying setup during this period.
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-slate-500">
+              <div class="rounded-xl bg-white/[0.03] p-3"><span class="text-slate-300 font-medium">1.</span> Check the selected stock and available data.</div>
+              <div class="rounded-xl bg-white/[0.03] p-3"><span class="text-slate-300 font-medium">2.</span> Try the other strategy to compare signal conditions.</div>
+              <div class="rounded-xl bg-white/[0.03] p-3"><span class="text-slate-300 font-medium">3.</span> A strategy needs its required conditions before opening a trade.</div>
+            </div>
+          </div>
+        </div>
+      </div>` : ''}
+  `;
+        drawChart(b.trades);
+    }
+
+    function renderCompare(data) {
+        const results = data.results || [];
+        const best = results.reduce((a, c) =>
+                (c.riskMetrics?.sharpeRatio ?? -Infinity) > (a.riskMetrics?.sharpeRatio ?? -Infinity) ? c : a,
+            results[0]);
+
+        const cards = results.map(res => {
+            const isBest = best && res.strategyName === best.strategyName;
+            const b = res.backtest || {};
+            const r = res.riskMetrics || {};
+            return `
+      <div class="relative rounded-2xl p-5 transition-all duration-200 ${isBest ? 'bg-gradient-to-b from-emerald-500/10 to-transparent border-2 border-emerald-500/40' : 'glass glass-hover'}">
+        ${isBest ? `<span class="absolute -top-3 left-5 bg-emerald-500 text-emerald-950 text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 w-fit">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.2H22l-6 4.6 2.3 7.2L12 16.4l-6.3 4.6 2.3-7.2-6-4.6h7.6z"/></svg>
+            Best Sharpe
+          </span>` : ''}
+        <h4 class="font-bold text-base mb-4 mt-1">${res.strategyName}</h4>
+        <div class="space-y-3 text-sm">
+          <div class="flex justify-between items-center"><span class="text-slate-500">Total Return</span><span class="font-semibold mono ${colorClass(b.totalReturnPct)}">${fmtPct(b.totalReturnPct)}</span></div>
+          <div class="flex justify-between items-center"><span class="text-slate-500">Win Rate</span><span class="font-semibold mono">${fmtPct(b.winRatePct)}</span></div>
+          <div class="flex justify-between items-center"><span class="text-slate-500">Total Trades</span><span class="font-semibold mono">${b.totalTrades ?? 0}</span></div>
+          <div class="flex justify-between items-center"><span class="text-slate-500">Sharpe Ratio</span><span class="font-semibold mono ${colorClass(r.sharpeRatio)}">${fmtNum(r.sharpeRatio)}</span></div>
+          <div class="flex justify-between items-center"><span class="text-slate-500">Max Drawdown</span><span class="font-semibold mono text-rose-400">-${fmtNum(Math.abs(r.maxDrawdownPct || 0))}%</span></div>
+        </div>
+      </div>`;
+        }).join('');
+
+        $('results').innerHTML = `
+    <div class="mb-5 animate-fade-up">
+      <h2 class="text-2xl font-extrabold flex items-center gap-2 flex-wrap">
+        ${data.ticker}
+        ${data.benchmark ? `<span class="text-slate-500 text-base font-medium">vs ${data.benchmark}</span>` : ''}
+      </h2>
+      <p class="text-sm text-slate-500 mt-1">${fmtDate(data.fromDate)} → ${fmtDate(data.toDate)} · ${data.barsAnalyzed} bars</p>
+    </div>
+
+    ${data.recommendation ? `
+      <div class="bg-indigo-500/10 border border-indigo-500/30 rounded-2xl p-4 mb-6 text-sm text-indigo-200 flex items-start gap-2.5 animate-fade-up">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" stroke-width="2" class="mt-0.5 shrink-0"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/></svg>
+        <span>${data.recommendation}</span>
+      </div>` : ''}
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-up">
+      ${cards}
+    </div>
+  `;
+    }
+
+    async function checkBackend() {
+        try {
+            await fetch(`${getApiBase()}/api/v1/analyze/PING`, { method: 'GET' });
+            $('apiStatus').innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> backend reachable';
+        } catch {
+            $('apiStatus').innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> backend not reachable';
+        }
+    }
+    checkBackend();
+    $('apiBase').addEventListener('change', checkBackend);
+</script>
+</body>
+</html>
